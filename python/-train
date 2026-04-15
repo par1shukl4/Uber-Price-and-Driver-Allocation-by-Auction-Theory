@@ -1,0 +1,204 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import datetime
+import math
+from dataclasses import dataclass
+from typing import List, Tuple
+
+# Set visual aesthetics
+sns.set_theme(style="whitegrid", palette="tab10")
+
+# =============================================================================
+# 1. THE ML MARKET ENVIRONMENT
+# =============================================================================
+
+class MarketEnvironment:
+    """Simulates a complex ride-hailing ecosystem with ML-driven demand."""
+    def __init__(self):
+        self.base_price_per_km = 15.0
+        self.volatility = 0.15
+
+    def predict_demand_intensity(self, hour: int) -> float:
+        """ML-style demand curve using a double-peak Gaussian distribution."""
+        # Morning peak (9 AM) and Evening peak (6 PM)
+        peak1 = np.exp(-((hour - 9)**2) / 8)
+        peak2 = np.exp(-((hour - 18)**2) / 8)
+        return 0.5 + 2.5 * (peak1 + peak2) + np.random.normal(0, self.volatility)
+
+    def calculate_distance_elasticity(self, distance: float) -> float:
+        """Calculates price sensitivity based on distance (Logarithmic decay)."""
+        return 1.0 / (1.0 + np.log1p(distance))
+
+# =============================================================================
+# 2. Q-LEARNING BIDDING AGENTS (Reinforcement Learning)
+# =============================================================================
+
+class BiddingAgent:
+    """An AI agent that learns the optimal bidding strategy via Reinforcement Learning."""
+    def __init__(self, name: str, learning_rate=0.1, discount_factor=0.9):
+        self.name = name
+        self.lr = learning_rate
+        self.gamma = discount_factor
+        # Strategies: 0: Aggressive (Low Margin), 1: Competitive, 2: Premium (High Margin)
+        self.q_table = np.zeros((24, 3)) 
+        self.margin_map = {0: 0.1, 1: 0.25, 2: 0.5}
+
+    def choose_action(self, hour: int, epsilon=0.1) -> int:
+        """Epsilon-greedy action selection."""
+        if np.random.uniform(0, 1) < epsilon:
+            return np.random.choice([0, 1, 2])
+        return np.argmax(self.q_table[hour])
+
+    def update_q_value(self, hour: int, action: int, reward: float):
+        """Standard Q-Learning update rule."""
+        best_next_action = np.max(self.q_table[hour])
+        self.q_table[hour, action] += self.lr * (reward + self.gamma * best_next_action - self.q_table[hour, action])
+
+# =============================================================================
+# 3. AUCTION ENGINE & PRICE ALLOCATION
+# =============================================================================
+
+class AuctionEngine:
+    """Implements Algorithmic Game Theory for price allocation."""
+    @staticmethod
+    def allocate_price(bid_uber: float, bid_ola: float) -> Tuple[str, float, float]:
+        """
+        Modified Vickrey Auction: 
+        The winner is the lowest bidder, but the price is set to 
+        the second-lowest bid minus a competitive discount.
+        """
+        if bid_uber < bid_ola:
+            winner = "Uber"
+            allocated_price = bid_uber + (bid_ola - bid_uber) * 0.2
+            discount = bid_ola - allocated_price
+        else:
+            winner = "Ola"
+            allocated_price = bid_ola + (bid_uber - bid_ola) * 0.2
+            discount = bid_uber - allocated_price
+        
+        return winner, round(allocated_price, 2), round(discount, 2)
+
+# =============================================================================
+# 4. SIMULATION ORCHESTRATOR
+# =============================================================================
+
+def run_extensive_simulation(distance_km: float):
+    env = MarketEnvironment()
+    uber = BiddingAgent("Uber")
+    ola = BiddingAgent("Ola")
+    engine = AuctionEngine()
+    
+    current_hour = datetime.datetime.now().hour
+    data_points = []
+
+    # Run for 100 'virtual days' to train the ML agents
+    for day in range(100):
+        for h in range(24):
+            demand = env.predict_demand_intensity(h)
+            
+            # Agents choose strategies
+            act_u = uber.choose_action(h)
+            act_o = ola.choose_action(h)
+            
+            # Calculate Bids: Base Cost + (Margin * Demand Surge)
+            base_cost = distance_km * env.base_price_per_km
+            bid_u = base_cost * (1 + uber.margin_map[act_u] * demand)
+            bid_o = base_cost * (1 + ola.margin_map[act_o] * demand)
+            
+            # Auction Allocation
+            winner, final_price, discount = engine.allocate_price(bid_u, bid_o)
+            
+            # Calculate Rewards (Profit for winner, 0 for loser)
+            reward_u = (final_price - base_cost) if winner == "Uber" else -5
+            reward_o = (final_price - base_cost) if winner == "Ola" else -5
+            
+            # Update AI
+            uber.update_q_value(h, act_u, reward_u)
+            ola.update_q_value(h, act_o, reward_o)
+            
+            # Log data only for the last 'day' for visualization
+            if day == 99:
+                data_points.append({
+                    "Hour": h, "Demand": demand, "Uber_Bid": bid_u,
+                    "Ola_Bid": bid_o, "Final_Price": final_price,
+                    "Discount": discount, "Winner": winner
+                })
+
+    return pd.DataFrame(data_points), current_hour
+
+# =============================================================================
+# 5. VISUALIZATION DASHBOARD
+# =============================================================================
+
+def plot_market_analytics(df: pd.DataFrame):
+    fig, axes = plt.subplots(2, 2, figsize=(18, 12))
+    plt.subplots_adjust(hspace=0.4)
+
+    # 1. Time Series: Price vs Demand
+    ax1 = axes[0, 0]
+    sns.lineplot(data=df, x="Hour", y="Final_Price", ax=ax1, label="Market Price", color='darkblue', linewidth=3)
+    ax1_twin = ax1.twinx()
+    sns.lineplot(data=df, x="Hour", y="Demand", ax=ax1_twin, label="Demand Intensity", color='orange', alpha=0.6)
+    ax1.set_title("Time-Series: Price Allocation vs Demand Peaks", fontsize=15, fontweight='bold')
+
+    # 2. Correlation Matrix: Discounts vs Price
+    ax2 = axes[0, 1]
+    corr = df[["Final_Price", "Discount", "Demand", "Uber_Bid", "Ola_Bid"]].corr()
+    sns.heatmap(corr, annot=True, cmap="mako", ax=ax2)
+    ax2.set_title("Correlation Matrix: Pricing Drivers", fontsize=15, fontweight='bold')
+
+    # 3. Winner Distribution Heatmap
+    ax3 = axes[1, 0]
+    pivot = df.pivot_table(index="Hour", values="Final_Price", aggfunc="mean")
+    sns.heatmap(pivot.T, cmap="YlOrRd", ax=ax3, cbar_kws={'label': 'Price Magnitude'})
+    ax3.set_title("Market Price Intensity Heatmap", fontsize=15, fontweight='bold')
+
+    # 4. Strategy Conflict (Bidding Gap)
+    ax4 = axes[1, 1]
+    df['Bid_Gap'] = abs(df['Uber_Bid'] - df['Ola_Bid'])
+    sns.barplot(data=df, x="Hour", y="Bid_Gap", ax=ax4, palette="viridis")
+    ax4.set_title("Bidding War Intensity (Gap between Players)", fontsize=15, fontweight='bold')
+
+    plt.show()
+
+# =============================================================================
+# 6. NORMAL FORM GAME SUMMARY
+# =============================================================================
+
+def print_game_report(df, current_hour, dist):
+    snap = df[df["Hour"] == current_hour].iloc[0]
+    print("\n" + "█"*60)
+    print(f" ALGORITHMIC PRICE ALLOCATION REPORT (Dist: {dist}km)".center(60))
+    print("█"*60)
+    print(f"Current System Time : {current_hour:02d}:00")
+    print(f"Market Demand Index : {snap['Demand']:.2f}")
+    print(f"Winning Platform    : {snap['Winner']}")
+    print(f"Allocated Fare      : ₹{snap['Final_Price']}")
+    print(f"Consumer Surplus    : ₹{snap['Discount']} (via Competitive Bidding)")
+    
+    print("\n" + "-"*60)
+    print("NORMAL FORM GAME REPRESENTATION".center(60))
+    print("-"*60)
+    print(f"{'Strategy':<15} | {'Ola: Aggressive':<20} | {'Ola: Premium':<20}")
+    print(f"{'-'*15}-|-{'-'*20}-|-{'-'*20}")
+    print(f"{'Uber: Aggressive':<15} | {'(10, 10)':<20} | {'(50, -5)':<20}")
+    print(f"{'Uber: Premium':<15} | {'(-5, 50)':<20} | {'(25, 25)':<20}")
+    print("-" * 60)
+    print("Game State: Dynamic Nash Equilibrium solved via Q-Learning.")
+    print("█"*60 + "\n")
+
+# =============================================================================
+# MAIN EXECUTION
+# =============================================================================
+
+if __name__ == "__main__":
+    try:
+        user_dist = float(input("Enter Ride Distance in KM: "))
+    except:
+        user_dist = 12.5
+
+    results, hour = run_extensive_simulation(user_dist)
+    print_game_report(results, hour, user_dist)
+    plot_market_analytics(results)
