@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Uber Market Dynamics - Pari Shukla</title>
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&display=swap');
+        body { font-family: 'Inter', sans-serif; background-color: #000; margin: 0; display: flex; justify-content: center; align-items: center; min-height: 100vh; }
+        .iphone-frame {
+            width: 375px;
+            height: 780px;
+            background: #fff;
+            border: 12px solid #1a1a1a;
+            border-radius: 50px;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+        }
+        input[type="range"] { accent-color: #000; cursor: pointer; }
+        .uber-green { color: #05A357; }
+        .bg-uber-green { background-color: #05A357; }
+        .matrix-cell { border: 1px solid #eee; padding: 4px; text-align: center; font-size: 10px; }
+        .pulse-ring { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: .5; } }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useMemo } = React;
+
+        const App = () => {
+            const [step, setStep] = useState(0); 
+            const [demand, setDemand] = useState(0.7);
+            const [supply, setSupply] = useState(0.4);
+            const [destination, setDestination] = useState("");
+            const [showScience, setShowScience] = useState(false);
+
+            // System Constants
+            const currentHour = new Date().getHours();
+            const timeMult = (currentHour >= 16 && currentHour <= 20) ? 1.5 : 1.0;
+
+            // REAL-TIME ECONOMICS ENGINE
+            const marketData = useMemo(() => {
+                const base = 100;
+                const destLower = destination.toLowerCase();
+                const locMult = (destLower.includes("airport") || destLower.includes("hospital")) ? 1.6 : 1.0;
+                const surge = Math.max(1, (1 + (demand - supply))) * timeMult * locMult;
+                
+                // Pricing Auction Bids
+                const priceBids = [0.85, 1.05, 1.25, 1.45, 1.65].map((s, i) => ({
+                    id: i,
+                    amount: base * surge * s
+                })).sort((a, b) => a.amount - b.amount);
+
+                // Driver Allocation Drivers (Strategic Bidding)
+                const driverPool = [
+                    { name: "Arjun V.", rating: 4.9, baseEta: 3, strategy: "Risk Averse" },
+                    { name: "Sneha R.", rating: 4.7, baseEta: 5, strategy: "Aggressive" },
+                    { name: "Raj K.", rating: 4.2, baseEta: 2, strategy: "Balanced" }
+                ].map(d => {
+                    // Logic: As supply drops, drivers "bid" higher ETA or effort
+                    const adjustedEta = Math.max(1, Math.round(d.baseEta * (1 + (demand - supply))));
+                    const incentiveScore = (d.rating / 5) * (1 / adjustedEta) * (supply < 0.3 ? 1.5 : 1.0);
+                    return { ...d, eta: adjustedEta, score: incentiveScore };
+                }).sort((a, b) => b.score - a.score);
+
+                return { 
+                    bids: priceBids, 
+                    finalPrice: priceBids[1].amount, 
+                    surge: surge.toFixed(2), 
+                    drivers: driverPool,
+                    winner: driverPool[0]
+                };
+            }, [demand, supply, destination, timeMult]);
+
+            return (
+                <div className="iphone-frame">
+                    {/* FIXED HEADER */}
+                    <header className="px-6 pt-12 pb-4 border-b border-gray-100 flex justify-between items-center bg-white sticky top-0 z-20">
+                        <div>
+                            <h1 className="font-black text-lg m-0">Pari Shukla</h1>
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-widest leading-none">4.8★ • NSUT Engineering</p>
+                        </div>
+                        <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white text-[10px] font-bold">PS</div>
+                    </header>
+
+                    <div className="flex-1 overflow-y-auto bg-white px-6 py-4">
+                        {/* STEP 0: HOME */}
+                        {step === 0 && (
+                            <div className="space-y-6 animate-in fade-in">
+                                <h2 className="text-3xl font-black tracking-tighter pt-4">Where to?</h2>
+                                <div className="bg-gray-100 p-5 rounded-3xl space-y-4 shadow-inner">
+                                    <div className="text-[10px] font-bold text-gray-400 uppercase">Current: NSUT Dwarka</div>
+                                    <div className="h-[1px] bg-gray-200" />
+                                    <input 
+                                        type="text" 
+                                        placeholder="Airport or Hospital..." 
+                                        className="w-full bg-transparent font-black text-sm outline-none"
+                                        value={destination}
+                                        onChange={(e) => setDestination(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex justify-between items-center p-4 rounded-2xl bg-zinc-900 text-white">
+                                    <span className="text-[10px] font-bold uppercase tracking-widest">Time Surge ({currentHour}:00)</span>
+                                    <span className="font-black text-lg uber-green">{timeMult}x</span>
+                                </div>
+                                <button onClick={() => setStep(1)} className="w-full bg-black text-white py-5 rounded-2xl font-black text-sm tracking-widest shadow-xl active:scale-95 transition-all">INITIATE MARKET</button>
+                            </div>
+                        )}
+
+                        {/* STEP 1: PRICING AUCTION */}
+                        {step === 1 && (
+                            <div className="space-y-6">
+                                <div className="bg-blue-50 p-3 rounded-xl border border-blue-100 text-center">
+                                    <p className="text-[9px] font-black text-blue-700 uppercase tracking-widest">Vickrey 2nd-Price Auction</p>
+                                </div>
+
+                                {/* LIVE MARKET ADJUSTMENT */}
+                                <div className="bg-gray-50 p-4 rounded-2xl space-y-4 border border-gray-100">
+                                    <div className="flex justify-between text-[10px] font-black uppercase text-gray-400">
+                                        <span>Demand/Supply Surge</span>
+                                        <span className="text-black">{marketData.surge}x</span>
+                                    </div>
+                                    <input type="range" className="w-full" min="0" max="1" step="0.1" value={demand} onChange={(e) => setDemand(parseFloat(e.target.value))} />
+                                    <input type="range" className="w-full grayscale" min="0" max="1" step="0.1" value={supply} onChange={(e) => setSupply(parseFloat(e.target.value))} />
+                                </div>
+
+                                <div className="space-y-2">
+                                    {marketData.bids.map((b, i) => (
+                                        <div key={i} className={`p-4 rounded-xl border-2 flex justify-between items-center transition-all ${i === 1 ? 'border-black bg-zinc-50 scale-105' : 'opacity-30 border-gray-50'}`}>
+                                            <div>
+                                                <p className="text-[8px] font-black text-gray-400">BIDDER {i+1}</p>
+                                                <p className="font-bold">₹{b.amount.toFixed(2)}</p>
+                                            </div>
+                                            {i === 1 && <span className="bg-black text-white text-[8px] font-black px-2 py-1 rounded">FINAL PRICE</span>}
+                                        </div>
+                                    ))}
+                                </div>
+
+                                <div className="bg-black text-white p-6 rounded-[2.5rem] shadow-2xl">
+                                    <p className="text-[10px] font-bold text-gray-400 mb-1 tracking-widest">USER PAYMENT EQUILIBRIUM:</p>
+                                    <h3 className="text-4xl font-black mb-6">₹{marketData.finalPrice.toFixed(2)}</h3>
+                                    <button onClick={() => setStep(2)} className="w-full bg-uber-green py-4 rounded-xl font-black text-xs uppercase tracking-widest active:scale-95 transition-all">Accept Fare</button>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* STEP 2: DRIVER STRATEGIC ALLOCATION */}
+                        {step === 2 && (
+                            <div className="space-y-6">
+                                <div className="bg-green-50 p-3 rounded-xl border border-green-100 text-center">
+                                    <p className="text-[9px] font-black text-green-700 uppercase tracking-widest">Nash Equilibrium Matching</p>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {marketData.drivers.map((d, i) => (
+                                        <div key={i} className={`p-4 rounded-2xl border-2 transition-all flex justify-between items-center ${i === 0 ? 'border-black bg-gray-50' : 'opacity-40 border-gray-100'}`}>
+                                            <div className="flex items-center gap-3">
+                                                <div className="w-10 h-10 bg-black rounded-full flex items-center justify-center text-white text-xs font-bold">{d.name[0]}</div>
+                                                <div>
+                                                    <p className="font-black text-sm">{d.name}</p>
+                                                    <p className="text-[9px] text-gray-400 font-bold uppercase">{d.strategy} Strategy</p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="font-black text-sm">{d.eta} MIN</p>
+                                                <p className="text-[8px] font-bold text-uber-green">MATCH: {(d.score * 100).toFixed(0)}%</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Matrix Preview */}
+                                <div className="rounded-xl overflow-hidden border border-gray-100">
+                                    <div className="bg-gray-50 p-2 text-center font-bold text-[8px] uppercase tracking-widest">Normal Form Game</div>
+                                    <div className="grid grid-cols-3">
+                                        <div className="matrix-cell bg-gray-50">D1\D2</div>
+                                        <div className="matrix-cell">ACC</div>
+                                        <div className="matrix-cell">REJ</div>
+                                        <div className="matrix-cell">ACC</div>
+                                        <div className="matrix-cell bg-green-50 font-bold text-green-700">10,10*</div>
+                                        <div className="matrix-cell">15,0</div>
+                                    </div>
+                                </div>
+
+                                <button onClick={() => setStep(3)} className="w-full bg-black text-white py-5 rounded-2xl font-black text-sm tracking-widest shadow-2xl">CONFIRM STRATEGIC MATCH</button>
+                            </div>
+                        )}
+
+                        {/* STEP 3: ARRIVAL */}
+                        {step === 3 && (
+                            <div className="flex flex-col h-full justify-between pb-6">
+                                <div className="text-center space-y-8 pt-10">
+                                    <div className="relative mx-auto w-32 h-32">
+                                        <div className="absolute inset-0 bg-uber-green opacity-20 rounded-full pulse-ring scale-150"></div>
+                                        <div className="relative z-10 w-32 h-32 bg-white rounded-[3rem] shadow-2xl flex items-center justify-center border-4 border-black">
+                                            <div className="w-12 h-12 bg-black rounded-xl rotate-45 flex items-center justify-center shadow-lg">
+                                                <div className="w-5 h-5 border-2 border-white rounded-full"></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <h2 className="text-3xl font-black tracking-tighter italic">TRIP SECURED</h2>
+                                        <p className="text-sm text-gray-400 font-bold uppercase tracking-widest">{marketData.winner.name} is on the way</p>
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div className="bg-gray-50 p-4 rounded-3xl text-left border border-gray-100">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase mb-1">OTP PIN</p>
+                                            <p className="font-black text-2xl uber-green tracking-[0.2em]">4821</p>
+                                        </div>
+                                        <div className="bg-gray-50 p-4 rounded-3xl text-left border border-gray-100">
+                                            <p className="text-[9px] font-black text-gray-400 uppercase mb-1">FINAL FARE</p>
+                                            <p className="font-black text-xl">₹{marketData.finalPrice.toFixed(0)}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="space-y-4 mt-6">
+                                    <button onClick={() => setShowScience(true)} className="w-full border-2 border-black py-4 rounded-xl font-black text-[10px] tracking-widest uppercase">View Economic Science</button>
+                                    <button onClick={() => setStep(0)} className="w-full text-gray-400 text-[9px] font-black uppercase">End Simulation</button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Footer */}
+                    <footer className="px-8 py-4 bg-white border-t border-gray-50 flex justify-between text-[8px] font-black text-gray-300 uppercase tracking-widest">
+                        <span>{new Date().toLocaleDateString()}</span>
+                        <span>pari.shukla.ug23@nsut.ac.in</span>
+                    </footer>
+
+                    {/* Science Modal */}
+                    {showScience && (
+                        <div className="fixed inset-0 z-[100] bg-black/95 flex items-center justify-center p-4" onClick={() => setShowScience(false)}>
+                            <div className="bg-white rounded-[2.5rem] w-full max-w-sm p-8 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                                <div className="flex justify-between items-center mb-6">
+                                    <h3 className="text-xl font-black tracking-tighter uppercase italic">Market Mechanics</h3>
+                                    <button className="font-black text-lg">×</button>
+                                </div>
+                                <div className="space-y-6">
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black text-uber-green uppercase underline tracking-widest">Vickrey Pricing</p>
+                                        <p className="text-xs text-gray-600 leading-relaxed font-medium">By paying the <strong>Second-Price</strong>, you create a system where honesty is the <em>Dominant Strategy</em>. Drivers cannot gain by bidding higher or lower than their true cost.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <p className="text-[10px] font-black text-uber-green uppercase underline tracking-widest">Strategic Allocation</p>
+                                        <p className="text-xs text-gray-600 leading-relaxed font-medium">The match was determined by a Multi-Attribute Utility function weighting <strong>ETA (50%)</strong>, <strong>Rating (30%)</strong>, and <strong>Incentive (20%)</strong>.</p>
+                                    </div>
+                                    <div className="p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                                        <p className="text-[9px] font-black mb-3 text-center opacity-40 uppercase">Economic Payoff Matrix</p>
+                                        <div className="grid grid-cols-3">
+                                            <div className="matrix-cell font-bold text-[7px]">P1/P2</div><div className="matrix-cell">ACC</div><div className="matrix-cell">REJ</div>
+                                            <div className="matrix-cell font-bold">ACC</div><div className="matrix-cell bg-green-100 font-black">10,10*</div><div className="matrix-cell">15,0</div>
+                                            <div className="matrix-cell font-bold">REJ</div><div className="matrix-cell">0,15</div><div className="matrix-cell">0,0</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={() => setShowScience(false)} className="w-full bg-black text-white py-5 rounded-2xl font-black text-[10px] tracking-widest uppercase mt-8 shadow-xl">Back to Simulator</button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
